@@ -80,9 +80,17 @@ function sceneSvg(width, height, palette) {
   </svg>`;
 }
 
-function toFileUrl(p) {
-  const resolved = path.resolve(p).replace(/\\/g, '/');
-  return `file://${resolved.startsWith('/') ? '' : '/'}${resolved}`;
+/**
+ * 로컬 이미지 파일을 base64 data URI로 변환한다.
+ * page.setContent()로 그린 HTML은 about:blank 출처라서 file:// 로컬 파일
+ * 참조가 크롬 보안 정책에 막힌다 (실사용 중 확인됨 — 배경이 그냥 회색으로
+ * 나오는 문제였음). data URI로 직접 심으면 이 문제가 없다.
+ */
+function imageToDataUri(filePath) {
+  const buf = fs.readFileSync(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[ext] || 'image/jpeg';
+  return `data:${mime};base64,${buf.toString('base64')}`;
 }
 
 /** 제목을 자연스러운 지점(쉼표 등)에서 최대 두 줄로 나눈다. */
@@ -129,7 +137,7 @@ async function generateThumbnail({ title, category, outPath, width = 1200, heigh
   const palette = pickPalette(title);
   const hasPhoto = backgroundImagePath && fs.existsSync(backgroundImagePath);
   const bgStyle = hasPhoto
-    ? `background-image: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.6) 78%), url("${toFileUrl(backgroundImagePath)}"); background-size: cover; background-position: center;`
+    ? `background-image: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.6) 78%), url("${imageToDataUri(backgroundImagePath)}"); background-size: cover; background-position: center;`
     : `background: linear-gradient(160deg, ${palette.bg1}, ${palette.bg2});`;
 
   const lines = splitTitleLines(title);
