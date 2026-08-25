@@ -31,6 +31,12 @@ async function launchBrowser(opts = {}) {
     args: ['--lang=ko-KR'],
   };
   if (executablePath) launchOpts.executablePath = executablePath;
+  // 일부 실행 환경(예: Claude Code 원격 세션)은 아웃바운드 HTTPS가 로컬 정책
+  // 프록시를 통해서만 나가도록 강제한다. Chromium은 HTTPS_PROXY 환경변수를
+  // 자동으로 읽지 않으므로 있으면 명시적으로 넘겨준다.
+  if (process.env.HTTPS_PROXY || process.env.https_proxy) {
+    launchOpts.proxy = { server: process.env.HTTPS_PROXY || process.env.https_proxy };
+  }
   return chromium.launch(launchOpts);
 }
 
