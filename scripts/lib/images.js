@@ -35,10 +35,11 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-async function renderHtml(html, { width, height, outPath, browser }) {
+async function renderHtml(html, { width, height, outPath, browser, afterSetContent }) {
   const page = await browser.newPage({ viewport: { width, height } });
   try {
     await page.setContent(html, { waitUntil: 'load' });
+    if (afterSetContent) await afterSetContent(page);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     await page.screenshot({ path: outPath });
   } finally {
@@ -105,9 +106,41 @@ function splitTitleLines(title) {
   return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
 }
 
-function fontSizeForLines(lines) {
-  const longest = Math.max(...lines.map((l) => l.length));
-  return longest > 18 ? 40 : longest > 12 ? 50 : 58;
+/**
+ * 브라우저에 실제로 렌더링해보고, 모든 .line 요소가 maxWidthPx 안에
+ * (줄바꿈 없이) 들어가는 가장 큰 폰트 크기를 이진 탐색으로 찾는다.
+ * 글자 수만으로 어림잡으면 한글/영문/숫자/기호가 섞였을 때 어긋나서
+ * (실사용 중 확인됨: 긴 제목에서 박스 안에 글자가 줄바꿈되어 버림)
+ * 실제 렌더링 폭을 재는 방식으로 교체했다.
+ */
+async function fitTextToWidth(page, selector, maxWidthPx, { min = 30, max = 100 } = {}) {
+  return page.evaluate(
+    ({ selector, maxWidthPx, min, max }) => {
+      const els = Array.from(document.querySelectorAll(selector));
+      if (els.length === 0) return max;
+      let lo = min;
+      let hi = max;
+      let best = min;
+      while (lo <= hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        els.forEach((el) => {
+          el.style.fontSize = `${mid}px`;
+        });
+        const fits = els.every((el) => el.scrollWidth <= maxWidthPx);
+        if (fits) {
+          best = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
+      }
+      els.forEach((el) => {
+        el.style.fontSize = `${best}px`;
+      });
+      return best;
+    },
+    { selector, maxWidthPx, min, max }
+  );
 }
 
 /** "@블로그아이디" 를 우측 하단에 작게 한 번만 표시하는 워터마크. */
@@ -132,7 +165,6 @@ async function generateThumbnail({ title, category, outPath, width = 1080, heigh
     : `background: linear-gradient(160deg, ${palette.bg1}, ${palette.bg2});`;
 
   const lines = splitTitleLines(title);
-  const fontSize = fontSizeForLines(lines);
   const lineHtml = lines
     .map((line, i) => {
       const isFirst = i % 2 === 0;
@@ -161,7 +193,7 @@ async function generateThumbnail({ title, category, outPath, width = 1080, heigh
     margin-bottom:18px; letter-spacing:0.5px;
   }
   .line {
-    display:inline-block; font-size:${fontSize}px; font-weight:800;
+    display:inline-block; font-size:80px; font-weight:800; white-space:nowrap;
     padding:10px 16px; line-height:1.35;
     box-decoration-break: clone; -webkit-box-decoration-break: clone;
   }
@@ -174,7 +206,15 @@ async function generateThumbnail({ title, category, outPath, width = 1080, heigh
     ${lineHtml}
   </div>
 </body></html>`;
-  await renderHtml(html, { width, height, outPath, browser });
+  // 실제 렌더링 폭을 재서 박스 안에 줄바꿈 없이 딱 맞는 가장 큰 글자 크기를 찾는다
+  // (내용 영역 폭 = 이미지 너비의 88%, 좌우 padding 6%씩 뺀 값과 동일).
+  await renderHtml(html, {
+    width,
+    height,
+    outPath,
+    browser,
+    afterSetContent: (page) => fitTextToWidth(page, '.line', width * 0.88, { min: 30, max: 100 }),
+  });
 }
 
 /** 텍스트 없이 숫자/제목 정도만 담는 최소한의 대체 카드 (차트로 그릴 데이터가 없을 때만 사용). */
