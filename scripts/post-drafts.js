@@ -73,7 +73,10 @@ async function fillTitle(scope, title) {
 }
 
 async function fillBody(scope, paragraphs) {
-  const body = scope.locator('.se-main-container');
+  // .se-main-container 는 구버전 에디터 클래스라 지금 에디터(스마트에디터 ONE)에는
+  // 존재하지 않는다. 실제 본문 문단은 .se-module-text 컴포넌트 안의
+  // .se-text-paragraph 요소 (제목의 .se-text-paragraph 와는 상위 컴포넌트로 구분됨).
+  const body = scope.locator('.se-module-text .se-text-paragraph, .se-component-content .se-text-paragraph').first();
   if (!(await body.isVisible({ timeout: 10000 }).catch(() => false))) return false;
   await body.click();
   const kb = body.page().keyboard;
