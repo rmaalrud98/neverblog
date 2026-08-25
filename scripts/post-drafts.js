@@ -48,6 +48,33 @@ async function dismissContinueDraftDialog(scope) {
   return false;
 }
 
+/**
+ * 에디터 오른쪽에 처음 뜨는 "도움말"(what's new) 안내 패널을 닫는다.
+ * 이 패널이 화면을 가리고 있으면 이후 클릭들이 계속 가로막혀서
+ * 타임아웃이 난다 (실사용 중 확인됨). 없으면 조용히 넘어간다.
+ */
+async function dismissHelpPanel(scope, page) {
+  const helpTitle = scope.locator('.se-help-title, [class*="help-title"]').filter({ hasText: '도움말' });
+  const visible = await helpTitle.first().isVisible({ timeout: 3000 }).catch(() => false);
+  if (!visible) return false;
+
+  const container = scope.locator('[class*="container__HW"]').first();
+  const candidates = [
+    container.getByRole('button', { name: /닫기|close/i }),
+    container.locator('button').first(),
+  ];
+  for (const btn of candidates) {
+    if (await btn.isVisible({ timeout: 2000 }).catch(() => false)) {
+      await btn.click().catch(() => {});
+      await helpTitle.first().isHidden({ timeout: 3000 }).catch(() => {});
+      return true;
+    }
+  }
+  // 폴백: Escape 키로 닫기 시도
+  await page.keyboard.press('Escape').catch(() => {});
+  return true;
+}
+
 /** iframe#mainFrame 이 있으면 그 안을, 없으면 page 자체를 에디터 스코프로 반환 */
 async function getEditorScope(page) {
   const frameEl = page.frameLocator('iframe#mainFrame');
@@ -174,6 +201,7 @@ async function postOneDraft(context, blogId, post, index, debugDir) {
 
     const scope = await getEditorScope(page);
     await dismissContinueDraftDialog(scope);
+    await dismissHelpPanel(scope, page);
     await page.waitForTimeout(500);
 
     const titleOk = await fillTitle(scope, post.title);
