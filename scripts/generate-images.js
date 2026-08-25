@@ -13,12 +13,18 @@
 //   { "type": "screenshot", "url": "https://...", "selector": "선택자(선택)" }
 //   { "type": "stat", "value": "2.75%", "caption": "..." }
 //
+// 썸네일 배경 사진: post.thumbnailQuery(영어 검색어)를 지정하면 Pexels
+// 무료 스톡포토에서 관련 사진을 받아와 배경으로 쓴다. PEXELS_API_KEY가
+// .env 에 없으면 자동으로 자체 일러스트 배경으로 대체된다.
+//
 // 사용법: node scripts/generate-images.js posts/2026-08-25.json
 
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
 const images = require('./lib/images');
 const { launchBrowser } = require('./lib/browser');
+const { fetchStockPhoto } = require('./lib/stockphoto');
 
 function pad2(n) {
   return String(n).padStart(2, '0');
@@ -61,6 +67,8 @@ async function generateOne(spec, outPath, browser, fallbackText) {
   if (!Array.isArray(data.posts)) throw new Error('posts 배열이 없습니다.');
 
   const dateStr = path.basename(file).replace(/\.json$/, '');
+  const blogId = process.env.NAVER_BLOG_ID;
+  const watermark = blogId ? `@${blogId}` : null;
   const browser = await launchBrowser({ headless: true });
   try {
     for (let i = 0; i < data.posts.length; i++) {
@@ -75,8 +83,22 @@ async function generateOne(spec, outPath, browser, fallbackText) {
       const imagePaths = [];
 
       // 0번: 썸네일(대표 이미지) — 유일하게 큰 텍스트가 들어가는 이미지.
+      // thumbnailQuery(영어 검색어)가 있으면 Pexels에서 관련 사진을 받아
+      // 배경으로 쓰고, 실패하거나 키가 없으면 자체 일러스트로 대체된다.
       const thumbPath = path.join(outDir, 'img-00-thumb.png');
-      await images.generateThumbnail({ title: post.title, category: post.category, outPath: thumbPath, browser });
+      let backgroundImagePath = null;
+      if (post.thumbnailQuery) {
+        const bgPath = path.join(outDir, 'bg-photo.jpg');
+        backgroundImagePath = await fetchStockPhoto(post.thumbnailQuery, bgPath);
+      }
+      await images.generateThumbnail({
+        title: post.title,
+        category: post.category,
+        outPath: thumbPath,
+        browser,
+        backgroundImagePath,
+        watermark,
+      });
       imagePaths.push(thumbPath);
 
       // 1번부터: 소제목 개수만큼 media 스펙(도표/그래프/캡처)을 채워 넣는다.

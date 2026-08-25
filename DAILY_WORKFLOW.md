@@ -129,10 +129,15 @@ node scripts/check-session.js
   사진·인물 사진 등 저작권 있는 이미지는 캡처하지 않는다)
 - `media` 항목 개수는 소제목 개수에 맞춘다 (소제목마다 이미지 1개씩 들어감).
 
+`thumbnailQuery` 에는 썸네일 배경 사진을 검색할 **영어 키워드**를 넣는다
+(Pexels는 한글 검색이 약함). 글 주제와 관련된 구체적인 키워드로 — 예:
+"interest rate finance", "stock market chart", "real estate apartment" 등.
+
 ```json
 {
   "posts": [
     { "title": "...", "category": "경제", "tags": [],
+      "thumbnailQuery": "finance interest rate business",
       "media": [
         { "type": "line", "title": "...", "labels": ["..."], "values": [0], "unit": "%" }
       ],
@@ -149,16 +154,20 @@ node scripts/check-session.js
 ```
 node scripts/generate-images.js posts/<오늘날짜>.json
 ```
-- **썸네일(대표 이미지) 1장만** 큰 텍스트가 들어간다 — 배경은 밋밋한 단색이 아니라
-  스카이라인/그래프 라인/동전 같은 경제 테마 일러스트를 직접 그려서 깔아준다.
-  (뉴스/타사 이미지를 긁어오지 않아 저작권·유사문서 문제가 없음.)
+- **썸네일(대표 이미지) 1장만** 큰 텍스트가 들어간다. 배경은 `PEXELS_API_KEY`가
+  `.env`에 설정되어 있으면 `thumbnailQuery`로 검색한 **실제 스톡포토**를 쓰고,
+  없거나 실패하면 자체 그린 일러스트(스카이라인/그래프 라인/동전)로 자동 대체된다.
+  텍스트는 검정/주황 배경 박스에 굵은 글씨 두 줄로, 화면 전체에 블로그 아이디
+  워터마크(`@{NAVER_BLOG_ID}`)를 옅게 반복 표시한다 (실제 참고 블로그 스타일 반영).
 - **본문 이미지(소제목마다 1장)는 텍스트 카드가 아니라 실제 도표·그래프**다.
   `media` 배열의 수치로 막대/꺾은선 그래프를 그리거나, 지정한 공식 출처 URL을
   실제로 캡처한다. `media`가 비어 있으면 최소한의 숫자 카드로 대체된다 —
   가능하면 항상 `media`를 채워서 진짜 그래프가 나오게 한다.
 - 미드저니·ImageFX 같은 AI 이미지 생성 서비스는 스크립트로 호출 가능한 공개
-  API가 없어서 자동화에 쓸 수 없다. 대신 실제 데이터 기반 도표/그래프와 공식
-  출처 캡처로 대체한다.
+  API가 없어서 자동화에 쓸 수 없다. 대신 Pexels 무료 스톡포토(실제 사진) +
+  실제 데이터 기반 도표/그래프 + 공식 출처 캡처로 대체한다.
+- Pexels 키 발급: https://www.pexels.com/api/ 무료 가입 → API 키를 `.env`의
+  `PEXELS_API_KEY`에 등록 (선택 사항, 없어도 동작함).
 - 최소 5장(썸네일 포함)을 `posts/images/<날짜>/post-<n>/` 에 저장하고, 각 post
   객체에 `images` 배열(파일 경로)을 채워 파일에 다시 저장한다.
 - 출처 페이지 캡처(`screenshot` 타입)는 네트워크/페이지 구조 문제로 실패할 수

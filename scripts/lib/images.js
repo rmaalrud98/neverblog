@@ -80,39 +80,99 @@ function sceneSvg(width, height, palette) {
   </svg>`;
 }
 
+function toFileUrl(p) {
+  const resolved = path.resolve(p).replace(/\\/g, '/');
+  return `file://${resolved.startsWith('/') ? '' : '/'}${resolved}`;
+}
+
+/** 제목을 자연스러운 지점(쉼표 등)에서 최대 두 줄로 나눈다. */
+function splitTitleLines(title) {
+  const commaIdx = title.indexOf(',');
+  if (commaIdx > 0 && commaIdx < title.length - 1) {
+    return [title.slice(0, commaIdx + 1).trim(), title.slice(commaIdx + 1).trim()];
+  }
+  const words = title.split(' ');
+  if (words.length <= 3) return [title];
+  const mid = Math.ceil(words.length / 2);
+  return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+}
+
+function fontSizeForLines(lines) {
+  const longest = Math.max(...lines.map((l) => l.length));
+  return longest > 18 ? 40 : longest > 12 ? 50 : 58;
+}
+
+/** "@블로그아이디" 를 화면 전체에 대각선으로 옅게 반복시키는 워터마크. */
+function watermarkHtml(text, width, height) {
+  const cols = 3;
+  const rows = 5;
+  const spans = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = (width / cols) * c - width * 0.08;
+      const y = (height / rows) * r + height * 0.04;
+      spans.push(`<div class="wm" style="left:${x}px; top:${y}px;">${escapeHtml(text)}</div>`);
+    }
+  }
+  return spans.join('\n');
+}
+
 /**
- * 썸네일(대표 이미지) 생성. 유일하게 큰 텍스트가 들어가는 이미지 — 뒤에는
- * 배경 일러스트(스카이라인/그래프/동전)와 어두운 스크림을 깔아 가독성을 확보한다.
+ * 썸네일(대표 이미지) 생성. 유일하게 큰 텍스트가 들어가는 이미지.
+ * - backgroundImagePath 가 있으면 실제 사진(스톡포토)을 배경으로 쓰고,
+ *   없으면 자체 그린 일러스트(스카이라인/그래프/동전)로 대체한다.
+ * - 텍스트는 검정/주황 배경 박스에 굵은 글씨로 두 줄까지 표시한다
+ *   (참고 예시 블로그의 실제 썸네일 스타일).
+ * - watermark(예: "@블로그아이디")를 지정하면 화면 전체에 옅게 반복 표시한다.
  */
-async function generateThumbnail({ title, category, outPath, width = 1200, height = 900, browser }) {
+async function generateThumbnail({ title, category, outPath, width = 1200, height = 900, browser, backgroundImagePath, watermark }) {
   const palette = pickPalette(title);
-  const fontSize = title.length > 26 ? 48 : title.length > 16 ? 58 : 68;
+  const hasPhoto = backgroundImagePath && fs.existsSync(backgroundImagePath);
+  const bgStyle = hasPhoto
+    ? `background-image: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.6) 78%), url("${toFileUrl(backgroundImagePath)}"); background-size: cover; background-position: center;`
+    : `background: linear-gradient(160deg, ${palette.bg1}, ${palette.bg2});`;
+
+  const lines = splitTitleLines(title);
+  const fontSize = fontSizeForLines(lines);
+  const lineHtml = lines
+    .map((line, i) => {
+      const isFirst = i % 2 === 0;
+      const bg = isFirst ? '#0a0a0a' : '#ff5a36';
+      const color = isFirst ? '#ffffff' : '#0a0a0a';
+      return `<span class="line" style="background:${bg}; color:${color};">${escapeHtml(line)}</span>`;
+    })
+    .join('<br/>');
+
   const html = `<!doctype html>
 <html><head><meta charset="utf-8"><style>
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { width:${width}px; height:${height}px; }
   body {
     font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Nanum Gothic","NanumGothic",sans-serif;
-    background: linear-gradient(160deg, ${palette.bg1}, ${palette.bg2});
     position:relative; overflow:hidden;
+    ${bgStyle}
   }
   .scene { position:absolute; inset:0; }
-  .scrim { position:absolute; inset:0; background: linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.65) 70%); }
-  .content { position:absolute; left:0; right:0; bottom:9%; padding:0 7%; color:#fff; }
-  .label {
-    display:inline-block; font-size:24px; font-weight:700;
-    background:rgba(255,255,255,0.22); padding:8px 24px; border-radius:999px;
-    margin-bottom:26px; letter-spacing:0.5px;
+  .wm { position:absolute; color:#fff; opacity:0.16; font-size:22px; font-weight:700;
+    white-space:nowrap; transform: rotate(-24deg); }
+  .content { position:absolute; left:0; right:0; bottom:8%; padding:0 6%; }
+  .cat {
+    display:inline-block; font-size:22px; font-weight:700; color:#fff;
+    background:rgba(0,0,0,0.45); padding:7px 20px; border-radius:999px;
+    margin-bottom:18px; letter-spacing:0.5px;
   }
-  .title { font-size:${fontSize}px; font-weight:800; line-height:1.4; word-break:keep-all; white-space:pre-line;
-    text-shadow: 0 2px 18px rgba(0,0,0,0.45); }
+  .line {
+    display:inline-block; font-size:${fontSize}px; font-weight:800;
+    padding:10px 16px; line-height:1.35;
+    box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  }
 </style></head>
 <body>
-  <div class="scene">${sceneSvg(width, height, palette)}</div>
-  <div class="scrim"></div>
+  ${hasPhoto ? '' : `<div class="scene">${sceneSvg(width, height, palette)}</div>`}
+  ${watermark ? watermarkHtml(watermark, width, height) : ''}
   <div class="content">
-    ${category ? `<div class="label">${escapeHtml(category)}</div>` : ''}
-    <div class="title">${escapeHtml(title)}</div>
+    ${category ? `<div class="cat">${escapeHtml(category)}</div><br/>` : ''}
+    ${lineHtml}
   </div>
 </body></html>`;
   await renderHtml(html, { width, height, outPath, browser });
