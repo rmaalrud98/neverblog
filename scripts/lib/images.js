@@ -1,20 +1,24 @@
-// 블로그 글에 넣을 텍스트 카드 이미지를 생성한다.
-// 외부 이미지(뉴스 캡처 등)는 저작권/유사문서 이슈가 있어서, 대신 Playwright로
-// 직접 그린 카드형 이미지를 쓴다 (완전히 새로 생성되므로 저작권/중복 이미지
-// 걱정이 없다).
+// 블로그 글에 넣을 이미지들을 생성/캡처한다.
+//
+// - generateThumbnail: 썸네일(대표 이미지) 1장. 배경 일러스트 + 큰 텍스트.
+//   유일하게 "텍스트가 크게 들어가는" 이미지 — 나머지는 텍스트 카드가 아니다.
+// - generateBarChart / generateLineChart: 실제 수치로 그리는 도표/그래프.
+// - generateStatCard: 차트로 그릴 수치가 없을 때의 최소한의 대체용
+//   (반복되는 카드뉴스 느낌을 피하려고 큰 숫자 하나 + 짧은 설명만 담는다).
+// - captureScreenshot: 신뢰할 수 있는 공식 출처 페이지를 실제로 캡처.
+//   (미드저니/ImageFX 같은 이미지 생성 서비스는 스크립트로 호출 가능한
+//   공개 API가 없어서 자동화에 못 쓴다 — 대신 실제 출처 페이지 캡처로 대체)
 
 const fs = require('fs');
 const path = require('path');
 
 const PALETTES = [
-  { bg1: '#667eea', bg2: '#764ba2', text: '#ffffff' },
-  { bg1: '#f6d365', bg2: '#fda085', text: '#3a2a1a' },
-  { bg1: '#5ee7df', bg2: '#b490ca', text: '#22223a' },
-  { bg1: '#ff9a9e', bg2: '#fecfef', text: '#3a1a2a' },
-  { bg1: '#a1c4fd', bg2: '#c2e9fb', text: '#1a2a3a' },
-  { bg1: '#30cfd0', bg2: '#330867', text: '#ffffff' },
-  { bg1: '#f7971e', bg2: '#ffd200', text: '#3a2a00' },
-  { bg1: '#43cea2', bg2: '#185a9d', text: '#ffffff' },
+  { bg1: '#667eea', bg2: '#764ba2', text: '#ffffff', accent: '#a3b1ff' },
+  { bg1: '#0f2027', bg2: '#2c5364', text: '#ffffff', accent: '#4dd0e1' },
+  { bg1: '#1e3c72', bg2: '#2a5298', text: '#ffffff', accent: '#7fd8ff' },
+  { bg1: '#232526', bg2: '#414345', text: '#ffffff', accent: '#ffd54f' },
+  { bg1: '#3a1c71', bg2: '#d76d77', text: '#ffffff', accent: '#ffe08a' },
+  { bg1: '#134e5e', bg2: '#71b280', text: '#ffffff', accent: '#d9f2b4' },
 ];
 
 function pickPalette(seed) {
@@ -31,46 +35,7 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-function cardHtml(text, { palette, label, width, height }) {
-  const fontSize = text.length > 40 ? 40 : text.length > 22 ? 48 : 58;
-  return `<!doctype html>
-<html><head><meta charset="utf-8"><style>
-  * { margin:0; padding:0; box-sizing:border-box; }
-  html, body { width:${width}px; height:${height}px; }
-  body {
-    font-family: "Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Nanum Gothic","NanumGothic",sans-serif;
-    background: linear-gradient(135deg, ${palette.bg1}, ${palette.bg2});
-    display:flex; align-items:center; justify-content:center;
-    position:relative; overflow:hidden;
-  }
-  .decor { position:absolute; border-radius:50%; background:#fff; opacity:0.15; }
-  .d1 { width:280px; height:280px; top:-90px; left:-90px; }
-  .d2 { width:200px; height:200px; bottom:-70px; right:-50px; }
-  .card { position:relative; z-index:1; width:84%; text-align:center; color:${palette.text}; }
-  .label {
-    display:inline-block; font-size:22px; font-weight:700;
-    background:rgba(255,255,255,0.28); padding:7px 22px; border-radius:999px;
-    margin-bottom:30px; letter-spacing:0.5px;
-  }
-  .text { font-size:${fontSize}px; font-weight:800; line-height:1.45; word-break:keep-all; white-space:pre-line; }
-</style></head>
-<body>
-  <div class="decor d1"></div>
-  <div class="decor d2"></div>
-  <div class="card">
-    ${label ? `<div class="label">${escapeHtml(label)}</div>` : ''}
-    <div class="text">${escapeHtml(text)}</div>
-  </div>
-</body></html>`;
-}
-
-/**
- * @param {{ text: string, label?: string, outPath: string, width?: number,
- *   height?: number, browser: import('playwright').Browser }} opts
- */
-async function generateCard({ text, label, outPath, width = 900, height = 700, browser }) {
-  const palette = pickPalette(text);
-  const html = cardHtml(text, { palette, label, width, height });
+async function renderHtml(html, { width, height, outPath, browser }) {
   const page = await browser.newPage({ viewport: { width, height } });
   try {
     await page.setContent(html, { waitUntil: 'load' });
@@ -81,4 +46,226 @@ async function generateCard({ text, label, outPath, width = 900, height = 700, b
   }
 }
 
-module.exports = { generateCard };
+/** 스카이라인 실루엣 + 상승 그래프 라인 + 동전을 SVG로 그려서 "배경 이미지" 느낌을 낸다. */
+function sceneSvg(width, height, palette) {
+  const buildings = [];
+  const n = 9;
+  const bw = width / n;
+  let seed = 7;
+  const rand = () => {
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  };
+  for (let i = 0; i < n; i++) {
+    const h = height * (0.18 + rand() * 0.32);
+    buildings.push(`<rect x="${i * bw}" y="${height - h}" width="${bw - 6}" height="${h}" fill="#000" opacity="0.28" />`);
+  }
+  const points = [];
+  for (let i = 0; i <= 6; i++) {
+    const x = (width / 6) * i;
+    const y = height * 0.72 - Math.pow(i, 1.4) * (height * 0.02);
+    points.push(`${x},${y}`);
+  }
+  const coins = [0.15, 0.35, 0.62, 0.8].map((f, i) => {
+    const cx = width * f;
+    const cy = height * (0.2 + (i % 2) * 0.08);
+    return `<circle cx="${cx}" cy="${cy}" r="18" fill="${palette.accent}" opacity="0.55" />`;
+  });
+  return `
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+    ${coins.join('\n')}
+    ${buildings.join('\n')}
+    <polyline points="${points.join(' ')}" fill="none" stroke="${palette.accent}" stroke-width="5" opacity="0.7" />
+    <circle cx="${points[points.length - 1].split(',')[0]}" cy="${points[points.length - 1].split(',')[1]}" r="7" fill="${palette.accent}" />
+  </svg>`;
+}
+
+/**
+ * 썸네일(대표 이미지) 생성. 유일하게 큰 텍스트가 들어가는 이미지 — 뒤에는
+ * 배경 일러스트(스카이라인/그래프/동전)와 어두운 스크림을 깔아 가독성을 확보한다.
+ */
+async function generateThumbnail({ title, category, outPath, width = 1200, height = 900, browser }) {
+  const palette = pickPalette(title);
+  const fontSize = title.length > 26 ? 48 : title.length > 16 ? 58 : 68;
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:${width}px; height:${height}px; }
+  body {
+    font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Nanum Gothic","NanumGothic",sans-serif;
+    background: linear-gradient(160deg, ${palette.bg1}, ${palette.bg2});
+    position:relative; overflow:hidden;
+  }
+  .scene { position:absolute; inset:0; }
+  .scrim { position:absolute; inset:0; background: linear-gradient(180deg, rgba(0,0,0,0.15), rgba(0,0,0,0.65) 70%); }
+  .content { position:absolute; left:0; right:0; bottom:9%; padding:0 7%; color:#fff; }
+  .label {
+    display:inline-block; font-size:24px; font-weight:700;
+    background:rgba(255,255,255,0.22); padding:8px 24px; border-radius:999px;
+    margin-bottom:26px; letter-spacing:0.5px;
+  }
+  .title { font-size:${fontSize}px; font-weight:800; line-height:1.4; word-break:keep-all; white-space:pre-line;
+    text-shadow: 0 2px 18px rgba(0,0,0,0.45); }
+</style></head>
+<body>
+  <div class="scene">${sceneSvg(width, height, palette)}</div>
+  <div class="scrim"></div>
+  <div class="content">
+    ${category ? `<div class="label">${escapeHtml(category)}</div>` : ''}
+    <div class="title">${escapeHtml(title)}</div>
+  </div>
+</body></html>`;
+  await renderHtml(html, { width, height, outPath, browser });
+}
+
+/** 텍스트 없이 숫자/제목 정도만 담는 최소한의 대체 카드 (차트로 그릴 데이터가 없을 때만 사용). */
+async function generateStatCard({ value, caption, outPath, width = 900, height = 600, browser }) {
+  const palette = pickPalette(value + caption);
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:${width}px; height:${height}px; }
+  body {
+    font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Nanum Gothic","NanumGothic",sans-serif;
+    background:#f7f8fb; display:flex; align-items:center; justify-content:center; flex-direction:column;
+  }
+  .value { font-size:96px; font-weight:800; color:${palette.bg2}; }
+  .caption { margin-top:18px; font-size:30px; font-weight:600; color:#333; text-align:center; padding:0 8%; word-break:keep-all; }
+  .bar { width:120px; height:8px; border-radius:99px; margin-top:26px; background: linear-gradient(90deg, ${palette.bg1}, ${palette.bg2}); }
+</style></head>
+<body>
+  <div class="value">${escapeHtml(value)}</div>
+  <div class="bar"></div>
+  <div class="caption">${escapeHtml(caption)}</div>
+</body></html>`;
+  await renderHtml(html, { width, height, outPath, browser });
+}
+
+/**
+ * 실제 수치로 막대그래프를 그린다.
+ * @param {{ title: string, labels: string[], values: number[], unit?: string, outPath: string, browser: any }} opts
+ */
+async function generateBarChart({ title, labels, values, unit = '', outPath, width = 900, height = 650, browser }) {
+  const palette = pickPalette(title);
+  const max = Math.max(...values, 0.0001);
+  const chartW = width * 0.8;
+  const chartH = height * 0.55;
+  const chartX = (width - chartW) / 2;
+  const chartY = height * 0.28;
+  const n = values.length;
+  const gap = chartW / n;
+  const barW = Math.min(90, gap * 0.5);
+  const bars = values
+    .map((v, i) => {
+      const h = (v / max) * chartH;
+      const x = chartX + gap * i + (gap - barW) / 2;
+      const y = chartY + chartH - h;
+      return `
+      <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="8" fill="${i === n - 1 ? palette.bg2 : palette.bg1}" />
+      <text x="${x + barW / 2}" y="${y - 14}" font-size="26" font-weight="700" text-anchor="middle" fill="#222">${escapeHtml(v)}${escapeHtml(unit)}</text>
+      <text x="${x + barW / 2}" y="${chartY + chartH + 34}" font-size="22" text-anchor="middle" fill="#555">${escapeHtml(labels[i] ?? '')}</text>`;
+    })
+    .join('\n');
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:${width}px; height:${height}px; background:#fff; }
+  body { font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Nanum Gothic","NanumGothic",sans-serif; }
+  .title { text-align:center; font-size:32px; font-weight:800; color:#222; padding-top:36px; word-break:keep-all; }
+</style></head>
+<body>
+  <div class="title">${escapeHtml(title)}</div>
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <line x1="${chartX}" y1="${chartY + chartH}" x2="${chartX + chartW}" y2="${chartY + chartH}" stroke="#ddd" stroke-width="2" />
+    ${bars}
+  </svg>
+</body></html>`;
+  await renderHtml(html, { width, height, outPath, browser });
+}
+
+/**
+ * 실제 수치로 꺾은선 그래프를 그린다 (추이를 보여줄 때).
+ * @param {{ title: string, labels: string[], values: number[], unit?: string, outPath: string, browser: any }} opts
+ */
+async function generateLineChart({ title, labels, values, unit = '', outPath, width = 900, height = 650, browser }) {
+  const palette = pickPalette(title);
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const range = max - min || 1;
+  const chartW = width * 0.78;
+  const chartH = height * 0.5;
+  const chartX = (width - chartW) / 2;
+  const chartY = height * 0.28;
+  const n = values.length;
+  const step = n > 1 ? chartW / (n - 1) : 0;
+  const pts = values.map((v, i) => {
+    const x = chartX + step * i;
+    const y = chartY + chartH - ((v - min) / range) * chartH;
+    return { x, y, v };
+  });
+  const polyline = pts.map((p) => `${p.x},${p.y}`).join(' ');
+  const dots = pts
+    .map(
+      (p, i) => `
+      <circle cx="${p.x}" cy="${p.y}" r="7" fill="${palette.bg2}" />
+      <text x="${p.x}" y="${p.y - 18}" font-size="24" font-weight="700" text-anchor="middle" fill="#222">${escapeHtml(p.v)}${escapeHtml(unit)}</text>
+      <text x="${p.x}" y="${chartY + chartH + 34}" font-size="22" text-anchor="middle" fill="#555">${escapeHtml(labels[i] ?? '')}</text>`
+    )
+    .join('\n');
+  const html = `<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:${width}px; height:${height}px; background:#fff; }
+  body { font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Nanum Gothic","NanumGothic",sans-serif; }
+  .title { text-align:center; font-size:32px; font-weight:800; color:#222; padding-top:36px; word-break:keep-all; }
+</style></head>
+<body>
+  <div class="title">${escapeHtml(title)}</div>
+  <svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <line x1="${chartX}" y1="${chartY + chartH}" x2="${chartX + chartW}" y2="${chartY + chartH}" stroke="#ddd" stroke-width="2" />
+    <polyline points="${polyline}" fill="none" stroke="${palette.bg1}" stroke-width="4" />
+    ${dots}
+  </svg>
+</body></html>`;
+  await renderHtml(html, { width, height, outPath, browser });
+}
+
+/**
+ * 실제 웹페이지(공식 출처)를 캡처한다. 정부/기관 발표 페이지처럼 출처가
+ * 분명하고 공개적으로 안내된 콘텐츠에만 쓴다 (뉴스 기사 이미지, 인물
+ * 사진 등은 저작권 문제가 있으니 쓰지 않는다 — DAILY_WORKFLOW.md 참고).
+ * 네트워크 문제나 페이지 구조 문제로 실패할 수 있어 항상 best-effort로
+ * 다루고, 실패하면 false를 반환한다 (호출 쪽에서 대체 이미지로 폴백).
+ *
+ * @param {{ url: string, outPath: string, selector?: string, browser: any }} opts
+ */
+async function captureScreenshot({ url, outPath, selector, browser, width = 1200, height = 900 }) {
+  const page = await browser.newPage({ viewport: { width, height } });
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.waitForTimeout(1500);
+    fs.mkdirSync(path.dirname(outPath), { recursive: true });
+    if (selector) {
+      const el = page.locator(selector).first();
+      if (await el.isVisible({ timeout: 5000 }).catch(() => false)) {
+        await el.screenshot({ path: outPath });
+        return true;
+      }
+    }
+    await page.screenshot({ path: outPath });
+    return true;
+  } catch (err) {
+    console.warn(`  ↳ [경고] 출처 페이지 캡처 실패 (${url}): ${err.message}`);
+    return false;
+  } finally {
+    await page.close();
+  }
+}
+
+module.exports = {
+  generateThumbnail,
+  generateStatCard,
+  generateBarChart,
+  generateLineChart,
+  captureScreenshot,
+};
