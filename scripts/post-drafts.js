@@ -63,7 +63,7 @@ async function fillTitle(scope, title) {
     scope.locator('[data-a11y-title], .se-placeholder').first(),
   ];
   for (const loc of candidates) {
-    if (await loc.first().isVisible({ timeout: 3000 }).catch(() => false)) {
+    if (await loc.first().isVisible({ timeout: 10000 }).catch(() => false)) {
       await loc.first().click();
       await loc.first().page().keyboard.type(title, { delay: 15 });
       return true;
@@ -74,7 +74,7 @@ async function fillTitle(scope, title) {
 
 async function fillBody(scope, paragraphs) {
   const body = scope.locator('.se-main-container');
-  if (!(await body.isVisible({ timeout: 5000 }).catch(() => false))) return false;
+  if (!(await body.isVisible({ timeout: 10000 }).catch(() => false))) return false;
   await body.click();
   const kb = body.page().keyboard;
   for (let i = 0; i < paragraphs.length; i++) {
@@ -124,7 +124,8 @@ async function postOneDraft(context, blogId, post, index, debugDir) {
       waitUntil: 'domcontentloaded',
       timeout: 45000,
     });
-    await page.waitForTimeout(1500);
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    await page.waitForTimeout(2500);
 
     const scope = await getEditorScope(page);
     await dismissContinueDraftDialog(scope);
