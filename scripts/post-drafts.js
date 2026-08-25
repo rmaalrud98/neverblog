@@ -84,7 +84,9 @@ async function fillBody(scope, paragraphs) {
     const p = paragraphs[i];
     const text = typeof p === 'string' ? p : p.text;
     const heading = typeof p === 'object' && p.heading;
-    await kb.type(heading ? `■ ${text}` : text, { delay: 8 });
+    // "밍니" 스타일은 소제목 앞에 ■ 같은 기호를 붙이지 않고, 질문형/도발형
+    // 문구 자체를 소제목으로 쓴다 (DAILY_WORKFLOW.md 참고).
+    await kb.type(text, { delay: 8 });
     await kb.press('Enter');
     if (heading) await kb.press('Enter'); // 소제목 뒤 한 줄 띄우기
   }
