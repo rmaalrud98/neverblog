@@ -41,7 +41,7 @@ function waitForEnter(prompt) {
   // 로그인 확인: 네이버 메인으로 이동해 로그아웃 링크/닉네임 요소가 보이는지 체크
   await page.goto('https://www.naver.com', { waitUntil: 'domcontentloaded' });
   const loggedIn = await page
-    .locator('#account, .MyView-module__nickname___, a[href*="logout"]')
+    .locator('#account, [class*="MyView-module__nickname"], a[href*="logout"]')
     .first()
     .isVisible()
     .catch(() => false);

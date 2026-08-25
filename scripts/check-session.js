@@ -25,7 +25,7 @@ const { resolveStorageStatePath } = require('./lib/session');
     await page.goto('https://www.naver.com', { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     const loggedIn = await page
-      .locator('#account, .MyView-module__nickname___, a[href*="logout"]')
+      .locator('#account, [class*="MyView-module__nickname"], a[href*="logout"]')
       .first()
       .isVisible({ timeout: 5000 })
       .catch(() => false);
