@@ -72,18 +72,58 @@ async function fillTitle(scope, title) {
   return false;
 }
 
-async function fillBody(scope, paragraphs) {
+/**
+ * 에디터 툴바의 "사진" 버튼을 눌러 로컬 이미지 파일을 업로드한다.
+ * ⚠️ 이 함수는 네이버 접속이 막힌 환경에서 작성되어 실제 네이버 에디터로
+ * 검증하지 못했다. 실패하면 (경고만 남기고) 글 작성 자체는 계속 진행한다 —
+ * 이미지 삽입 실패가 텍스트 저장까지 막아서는 안 되기 때문.
+ */
+async function insertImage(scope, page, imagePath) {
+  if (!imagePath || !fs.existsSync(imagePath)) return false;
+  try {
+    const photoBtn = scope.getByRole('button', { name: '사진' }).first();
+    if (!(await photoBtn.isVisible({ timeout: 5000 }).catch(() => false))) return false;
+
+    // 클릭하면 보통 OS 파일 선택창이 뜨는데, Playwright는 이를 'filechooser'
+    // 이벤트로 가로챌 수 있다. 혹시 숨겨진 <input type="file"> 을 직접 쓰는
+    // 구조라면 그쪽으로 폴백한다.
+    const chooserPromise = page.waitForEvent('filechooser', { timeout: 8000 }).catch(() => null);
+    await photoBtn.click();
+    const chooser = await chooserPromise;
+    if (chooser) {
+      await chooser.setFiles(imagePath);
+    } else {
+      const fileInput = scope.locator('input[type="file"]').first();
+      if ((await fileInput.count()) === 0) return false;
+      await fileInput.setInputFiles(imagePath);
+    }
+    await page.waitForTimeout(2500); // 업로드/렌더링 대기
+    return true;
+  } catch (err) {
+    console.warn(`  ↳ [경고] 이미지 삽입 실패 (${path.basename(imagePath)}): ${err.message}`);
+    return false;
+  }
+}
+
+async function fillBody(scope, paragraphs, headingImages = []) {
   // .se-main-container 는 구버전 에디터 클래스라 지금 에디터(스마트에디터 ONE)에는
   // 존재하지 않는다. 실제 본문 문단은 .se-module-text 컴포넌트 안의
   // .se-text-paragraph 요소 (제목의 .se-text-paragraph 와는 상위 컴포넌트로 구분됨).
   const body = scope.locator('.se-module-text .se-text-paragraph, .se-component-content .se-text-paragraph').first();
   if (!(await body.isVisible({ timeout: 10000 }).catch(() => false))) return false;
   await body.click();
-  const kb = body.page().keyboard;
+  const page = body.page();
+  const kb = page.keyboard;
+  let headingImgIdx = 0;
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i];
     const text = typeof p === 'string' ? p : p.text;
     const heading = typeof p === 'object' && p.heading;
+    if (heading && headingImages[headingImgIdx]) {
+      const inserted = await insertImage(scope, page, headingImages[headingImgIdx]);
+      if (!inserted) console.warn(`  ↳ [경고] 소제목 이미지 삽입 실패: ${headingImages[headingImgIdx]}`);
+      headingImgIdx++;
+    }
     // "밍니" 스타일은 소제목 앞에 ■ 같은 기호를 붙이지 않고, 질문형/도발형
     // 문구 자체를 소제목으로 쓴다 (DAILY_WORKFLOW.md 참고).
     await kb.type(text, { delay: 8 });
@@ -139,7 +179,20 @@ async function postOneDraft(context, blogId, post, index, debugDir) {
     const titleOk = await fillTitle(scope, post.title);
     if (!titleOk) throw new Error('제목 입력란을 찾지 못했습니다 (에디터 UI 변경 가능성)');
 
-    const bodyOk = await fillBody(scope, post.paragraphs || []);
+    // images[0] = 대표(썸네일)용 카드 이미지, images[1..] = 소제목마다 하나씩.
+    // scripts/generate-images.js 가 미리 채워 넣는다.
+    const images = Array.isArray(post.images) ? post.images : [];
+    if (images[0]) {
+      // 본문 입력란에 커서를 먼저 두어야 그 위치에 이미지가 들어간다.
+      const bodyStart = scope.locator('.se-module-text .se-text-paragraph, .se-component-content .se-text-paragraph').first();
+      if (await bodyStart.isVisible({ timeout: 10000 }).catch(() => false)) {
+        await bodyStart.click();
+        const thumbOk = await insertImage(scope, page, images[0]);
+        if (!thumbOk) console.warn(`  ↳ [경고] 대표 이미지 삽입 실패 (post #${index + 1})`);
+      }
+    }
+
+    const bodyOk = await fillBody(scope, post.paragraphs || [], images.slice(1));
     if (!bodyOk) throw new Error('본문 입력란을 찾지 못했습니다 (에디터 UI 변경 가능성)');
 
     const tagsOk = await addTags(scope, post.tags);

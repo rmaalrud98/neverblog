@@ -7,6 +7,7 @@
   "scripts": {
     "login-setup": "node scripts/login-setup.js",
     "check-session": "node scripts/check-session.js",
+    "generate-images": "node scripts/generate-images.js",
     "post-drafts": "node scripts/post-drafts.js"
   },
   "repository": {
