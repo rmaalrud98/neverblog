@@ -13,7 +13,7 @@ const { launchBrowser } = require('./lib/browser');
 const { resolveStorageStatePath } = require('./lib/session');
 
 const SAVE_BUTTON_NAMES = ['저장']; // "발행", "등록" 등은 절대 포함하지 않는다.
-const CONTINUE_DIALOG_DISCARD_NAMES = ['취소']; // 로컬 자동저장 이어쓰기 팝업 무시하고 새로 시작
+const CONTINUE_DIALOG_DISCARD_NAMES = ['취소', '확인']; // 로컬 자동저장 이어쓰기 팝업 / "삭제되었거나 존재하지 않는 게시물입니다" 알림 무시
 
 function parseArgs(argv) {
   const args = { file: null, blogId: null, headed: false };
@@ -117,7 +117,10 @@ async function postOneDraft(context, blogId, post, index, debugDir) {
   const page = await context.newPage();
   page.on('dialog', (d) => d.accept().catch(() => {}));
   try {
-    await page.goto(`https://blog.naver.com/${blogId}/postwrite`, {
+    // '/postwrite' 단독 경로는 (이전에 쓰다 만 임시글을 이어 불러오려다 실패하며)
+    // "삭제되었거나 존재하지 않는 게시물입니다" 팝업과 함께 블로그 홈으로
+    // 튕겨나가는 경우가 있었다. '?Redirect=Write&' 가 실제 "새 글쓰기" 진입점.
+    await page.goto(`https://blog.naver.com/${blogId}?Redirect=Write&`, {
       waitUntil: 'domcontentloaded',
       timeout: 45000,
     });

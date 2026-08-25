@@ -2,7 +2,7 @@
 // 매일 자동 실행 루틴이 글을 쓰기 전에 먼저 이 스크립트로 점검하는 것을 권장.
 //
 // 판단 방법: 네이버 홈 화면의 DOM 요소(닉네임 등)를 추측해서 보는 대신,
-// 실제 post-drafts.js가 쓰는 글쓰기 페이지(blog.naver.com/{id}/postwrite)로
+// 실제 post-drafts.js가 쓰는 글쓰기 진입 주소(blog.naver.com/{id}?Redirect=Write&)로
 // 직접 들어가본다. 로그인이 안 되어 있으면 네이버가 자동으로 로그인 페이지
 // (nid.naver.com)로 튕겨내므로, 최종 URL만 보면 확실하게 판단할 수 있다.
 //
@@ -41,7 +41,7 @@ const debugShot = path.join(debugDir, 'check-session.png');
   try {
     const context = await browser.newContext({ storageState: storageStatePath, locale: 'ko-KR' });
     const page = await context.newPage();
-    await page.goto(`https://blog.naver.com/${blogId}/postwrite`, {
+    await page.goto(`https://blog.naver.com/${blogId}?Redirect=Write&`, {
       waitUntil: 'domcontentloaded',
       timeout: 30000,
     });
