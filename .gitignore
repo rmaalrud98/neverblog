@@ -1,0 +1,10 @@
+node_modules/
+.env
+
+# 로그인 세션(쿠키) - 절대 커밋 금지
+.auth/
+
+# 매일 생성되는 글/결과물 (예시 파일만 git에 남김)
+posts/*.json
+!posts/sample.json
+posts/debug/

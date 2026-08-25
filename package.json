@@ -1,0 +1,32 @@
+{
+  "name": "neverblog",
+  "version": "1.0.0",
+  "description": "네이버 블로그(경제 채널) 자동 초안(임시저장) 작성 도구",
+  "main": "index.js",
+  "type": "commonjs",
+  "scripts": {
+    "login-setup": "node scripts/login-setup.js",
+    "check-session": "node scripts/check-session.js",
+    "post-drafts": "node scripts/post-drafts.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rmaalrud98/neverblog.git"
+  },
+  "keywords": [
+    "naver",
+    "blog",
+    "automation",
+    "playwright"
+  ],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rmaalrud98/neverblog/issues"
+  },
+  "homepage": "https://github.com/rmaalrud98/neverblog#readme",
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "playwright": "^1.62.1"
+  }
+}
