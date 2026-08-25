@@ -110,19 +110,9 @@ function fontSizeForLines(lines) {
   return longest > 18 ? 40 : longest > 12 ? 50 : 58;
 }
 
-/** "@블로그아이디" 를 화면 전체에 대각선으로 옅게 반복시키는 워터마크. */
-function watermarkHtml(text, width, height) {
-  const cols = 3;
-  const rows = 5;
-  const spans = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const x = (width / cols) * c - width * 0.08;
-      const y = (height / rows) * r + height * 0.04;
-      spans.push(`<div class="wm" style="left:${x}px; top:${y}px;">${escapeHtml(text)}</div>`);
-    }
-  }
-  return spans.join('\n');
+/** "@블로그아이디" 를 우측 하단에 작게 한 번만 표시하는 워터마크. */
+function watermarkHtml(text) {
+  return `<div class="wm">${escapeHtml(text)}</div>`;
 }
 
 /**
@@ -131,9 +121,10 @@ function watermarkHtml(text, width, height) {
  *   없으면 자체 그린 일러스트(스카이라인/그래프/동전)로 대체한다.
  * - 텍스트는 검정/주황 배경 박스에 굵은 글씨로 두 줄까지 표시한다
  *   (참고 예시 블로그의 실제 썸네일 스타일).
- * - watermark(예: "@블로그아이디")를 지정하면 화면 전체에 옅게 반복 표시한다.
+ * - watermark(예: "@블로그아이디")를 지정하면 우측 하단에 작게 한 번 표시한다.
+ * - 기본 비율은 1:1 정사각형 (참고 예시 블로그의 실제 썸네일 비율).
  */
-async function generateThumbnail({ title, category, outPath, width = 1200, height = 900, browser, backgroundImagePath, watermark }) {
+async function generateThumbnail({ title, category, outPath, width = 1080, height = 1080, browser, backgroundImagePath, watermark }) {
   const palette = pickPalette(title);
   const hasPhoto = backgroundImagePath && fs.existsSync(backgroundImagePath);
   const bgStyle = hasPhoto
@@ -161,8 +152,8 @@ async function generateThumbnail({ title, category, outPath, width = 1200, heigh
     ${bgStyle}
   }
   .scene { position:absolute; inset:0; }
-  .wm { position:absolute; color:#fff; opacity:0.16; font-size:22px; font-weight:700;
-    white-space:nowrap; transform: rotate(-24deg); }
+  .wm { position:absolute; right:4%; bottom:3%; color:#fff; opacity:0.55; font-size:20px;
+    font-weight:600; white-space:nowrap; text-shadow:0 1px 5px rgba(0,0,0,0.6); }
   .content { position:absolute; left:0; right:0; bottom:8%; padding:0 6%; }
   .cat {
     display:inline-block; font-size:22px; font-weight:700; color:#fff;
@@ -177,7 +168,7 @@ async function generateThumbnail({ title, category, outPath, width = 1200, heigh
 </style></head>
 <body>
   ${hasPhoto ? '' : `<div class="scene">${sceneSvg(width, height, palette)}</div>`}
-  ${watermark ? watermarkHtml(watermark, width, height) : ''}
+  ${watermark ? watermarkHtml(watermark) : ''}
   <div class="content">
     ${category ? `<div class="cat">${escapeHtml(category)}</div><br/>` : ''}
     ${lineHtml}
